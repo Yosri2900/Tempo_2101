@@ -7,8 +7,8 @@ const int ledPins[] = {LEDRED, LEDYELLOW};  // Add more LEDs here if needed
 const char* ledColors[] = {"RED", "YELLOW"};  // Corresponding names
 const int numLeds = sizeof(ledPins) / sizeof(ledPins[0]);
 const int xPin = A0;
-const int yPin = A1;
 int currentLEDIndex = 0; 
+int potPin = A1; // Potentiometer output connected to analog pin 3
 
 // Set the LCD address to 0x3F for a 16 chars and 2 line display
 LiquidCrystal_I2C lcd(0x3F, 16, 2);
@@ -28,13 +28,13 @@ void setup() {
 
 void loop() {
   int xVal = analogRead(xPin);
-  int yVal = analogRead(yPin);
+  int potVal = potVal = analogRead(potPin);
 
   Serial.print("X = ");
   Serial.println(xVal);
+  Serial.println("potentiometer: ");
+  Serial.print(potVal);
 
-  Serial.print("    Y = ");
-  Serial.println(yVal);
   // Detect right movement
   if (xVal >= 1020) {  
       moveLED(1);  // Move right

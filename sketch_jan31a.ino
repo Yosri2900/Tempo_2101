@@ -3,17 +3,7 @@
 #include <DFRobotDFPlayerMini.h>
 #include <SoftwareSerial.h>
 const uint8_t ledPin = 13;
-const uint8_t movementLeftPin = 12;
 const uint8_t movementRightPin = 9;
-// const char* trackNames[] = {
-//     "Track 1: Song A", 
-//     "Track 2: Song B",
-//     "Track 3: Song C",
-//     "Track 4: Song D",
-//     "Track 5: Song E",
-//     "Track 6: Song F",
-//     "Track 7: Song G",
-// };
 
 const int xPin = A0;
 int potPin = A1; // Potentiometer output connected to analog pin 3
@@ -38,8 +28,6 @@ void setup() {
   mySerial.begin(9600);
   pinMode(buttonPin, INPUT);
   pinMode(ledPin, OUTPUT);
-  pinMode(movementLeftPin, OUTPUT);
-  pinMode(movementRightPin, OUTPUT);
   lcd.begin();
   lcd.backlight();
   if (!mp3.begin(mySerial)) {
@@ -82,33 +70,28 @@ void loop() {
     digitalWrite(movementRightPin, HIGH);
     delay(250);
     digitalWrite(movementRightPin, LOW);
-    currentTrack = (currentTrack + 1) % totalTracks;
-    if (currentTrack == 0) {
-      currentTrack = 1;
-    }
+    currentTrack = (currentTrack % totalTracks) + 1;
+    updateLCD();
     lastMoveTime = currentTime;
   } else if (xVal <= 300 && (currentTime - lastMoveTime >= debounceDelay)) {  
     // Detect left movement
     digitalWrite(movementLeftPin, HIGH);
     delay(250);
     digitalWrite(movementLeftPin, LOW);
-    currentTrack = (currentTrack - 1) % totalTracks;
-    if (currentTrack == 0) {
+    currentTrack = (currentTrack - 1);
+    if (currentTrack < 1) {
       currentTrack = totalTracks;
-    }  
+    }
+    updateLCD();
     lastMoveTime = currentTime;
   }
 
   // Button Press to Play Track
   if (buttonState == HIGH && (millis() - lastButtonPress > buttonDebounceDelay)) {
-    digitalWrite(ledPin, HIGH);
     int state = mp3.readState();  // Get current player state
-    delay(250);                        // Wait for 500ms
-    digitalWrite(ledPin, LOW);   // Turn LED OFF
     Serial.print("Playing track: ");
     Serial.println(currentTrack);
     mp3.play(currentTrack);
-    updateLCD();
     lastButtonPress = millis();
 
   }
@@ -121,7 +104,6 @@ void updateLCD() {
   
   // Display Track Name
   lcd.setCursor(0, 0);
-  //lcd.print(trackNames[currentTrack - 1]); PRINTING SONG NAME IS IMPOSSIBLE...
   lcd.print("Track: ");
   lcd.print(currentTrack);
 

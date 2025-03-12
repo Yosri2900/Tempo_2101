@@ -2,56 +2,79 @@
 #include <LiquidCrystal_I2C.h>
 #include <DFRobotDFPlayerMini.h>
 #include <SoftwareSerial.h>
+#include <avr/sleep.h>
+#include <avr/power.h>
+#include <LowPower.h>
 const uint8_t ledPin = 13;
-const uint8_t movementRightPin = 9;
 
 const int xPin = A0;
-int potPin = A1; // Potentiometer output connected to analog pin 3
+int yPin = A1;
 // Set the LCD address to 0x3F for a 16 chars and 2 line display
 LiquidCrystal_I2C lcd(0x3F, 16, 2);
 // MP3 Player
 DFRobotDFPlayerMini mp3;
-SoftwareSerial mySerial(10, 11);  // RX, TX
+SoftwareSerial mySerial(10, 11);  // TX, RX
 
 int currentTrack = 1;
 int buttonState = 0;
 const int buttonPin = 2;  // the number of the pushbutton pin
 unsigned long lastMoveTime = 0;  // Store the last movement time
 const int debounceDelay = 300;   // Set the debounce delay (300ms)
-int lastVolumeLevel = -1;
+int lastVolumeLevel = 15;  // Default volume at startup
 
 unsigned long lastButtonPress = 0;
 const int buttonDebounceDelay = 300;
+int lastPlayedTrack = 0;
+bool isDeviceOn = true;  // Start with LCD & MP3 ON
+bool buttonPressed = false;  // Flag to check if button is held down
 
 void setup() {
   Serial.begin(9600);
   mySerial.begin(9600);
-  pinMode(buttonPin, INPUT);
+  pinMode(buttonPin, INPUT_PULLUP);
   pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
   lcd.begin();
   lcd.backlight();
   if (!mp3.begin(mySerial)) {
-      Serial.println("MP3 Module Not Found!");
+      // Serial.println("MP3 Module Not Found!");
       while (true);
   }
-  Serial.println("MP3 Module Ready!");
-  mp3.volume(15);
+  // Serial.println("MP3 Module Ready!");
+  mp3.volume(lastVolumeLevel);
   delay(1000);
 
   updateLCD();
 }
 
 void loop() {
-  int xVal = analogRead(xPin);
-  int potVal = analogRead(potPin);
-  buttonState = digitalRead(buttonPin);
-  // Map potentiometer value (0-1023) to volume range (0-30)
-  int volumeLevel = map(potVal, 0, 1023, 0, 30);
-  if (volumeLevel != lastVolumeLevel) {
-    mp3.volume(volumeLevel);
-    lastVolumeLevel = volumeLevel;
-    updateLCD();
+
+  int buttonState = digitalRead(buttonPin);
+  unsigned long currentTime = millis();
+
+  if (buttonState == LOW && !buttonPressed && (currentTime - lastButtonPress > buttonDebounceDelay)) {
+      buttonPressed = true;  // Mark button as held
+      isDeviceOn = !isDeviceOn;  // Toggle power state
+      lastButtonPress = currentTime;
+      if (!isDeviceOn) {              
+          lcd.noBacklight();
+          lcd.noDisplay();
+          digitalWrite(ledPin, LOW);
+          mp3.pause();
+      } else {
+          lcd.display();
+          lcd.backlight();
+          digitalWrite(ledPin, HIGH);
+          mp3.start();
+      }
   }
+  if (buttonState == HIGH) {
+      buttonPressed = false;
+  }
+  if (!isDeviceOn) return;
+
+  int xVal = analogRead(xPin);
+  int yVal = analogRead(yPin);
 
   // Serial.print("X = ");
   // Serial.println(xVal);
@@ -59,25 +82,35 @@ void loop() {
   // Serial.println(volumeLevel);
 
   int totalTracks = mp3.readFileCounts();
-  Serial.print("Total Tracks = ");
-  Serial.println(totalTracks);
-  Serial.print("currentTrack= ");
-  Serial.println(currentTrack);
+  // Serial.print("Total Tracks = ");
+  // Serial.println(totalTracks);
+
+  static unsigned long lastVolumeChangeTime = 0;
+
+  if (yVal >= 1000 && (currentTime - lastVolumeChangeTime >= debounceDelay)) {  
+      if (lastVolumeLevel < 30) {  
+          lastVolumeLevel++;
+          mp3.volume(lastVolumeLevel);  // Apply volume change here
+          updateLCD();
+      }
+      lastVolumeChangeTime = currentTime;
+  } 
+  else if (yVal <= 300 && (currentTime - lastVolumeChangeTime >= debounceDelay)) {  
+      if (lastVolumeLevel > 0) {  
+          lastVolumeLevel--;
+          mp3.volume(lastVolumeLevel);  // Apply volume change here
+          updateLCD();
+      }
+      lastVolumeChangeTime = currentTime;
+  }
   
-  unsigned long currentTime = millis();
   if (xVal >= 1000 && (currentTime - lastMoveTime >= debounceDelay)) {  
     // Detect right movement
-    digitalWrite(movementRightPin, HIGH);
-    delay(250);
-    digitalWrite(movementRightPin, LOW);
     currentTrack = (currentTrack % totalTracks) + 1;
     updateLCD();
     lastMoveTime = currentTime;
   } else if (xVal <= 300 && (currentTime - lastMoveTime >= debounceDelay)) {  
     // Detect left movement
-    digitalWrite(movementLeftPin, HIGH);
-    delay(250);
-    digitalWrite(movementLeftPin, LOW);
     currentTrack = (currentTrack - 1);
     if (currentTrack < 1) {
       currentTrack = totalTracks;
@@ -86,19 +119,15 @@ void loop() {
     lastMoveTime = currentTime;
   }
 
-  // Button Press to Play Track
-  if (buttonState == HIGH && (millis() - lastButtonPress > buttonDebounceDelay)) {
-    int state = mp3.readState();  // Get current player state
-    Serial.print("Playing track: ");
-    Serial.println(currentTrack);
-    mp3.play(currentTrack);
-    lastButtonPress = millis();
-
+  if (currentTrack != lastPlayedTrack) {
+      // Serial.print("Playing track: ");
+      // Serial.println(currentTrack);
+      mp3.play(currentTrack);
+      lastPlayedTrack = currentTrack;
   }
-
 }
 
-// Function to update LCD display with current LED color
+// Function to update LCD display with current track# and volume
 void updateLCD() {
   lcd.clear();
   
